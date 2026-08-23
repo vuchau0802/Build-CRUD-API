@@ -1,49 +1,62 @@
 # Task API
 
-A CRUD API for managing a to-do list, built with FastAPI as part of the FlyRank Backend AI Engineering internship. Originally in-memory (Week 2, Assignment BE-01), now backed by a real SQLite database (Week 3, Assignment A2) — the API behaves identically, but data now survives a server restart.
+A CRUD API for managing a to-do list, built with FastAPI as part of the FlyRank Backend AI Engineering internship. The project has evolved through three storage backends while its endpoints stayed identical:
+ 
+1. **In-memory** — data lost on restart
+2. **SQLite** — data in a single file, survives a restart
+3. **PostgreSQL in Docker** — a real database server, running in a container alongside the app, started together with one command
 
 ## What this is
 
-A REST API that supports Create, Read, Update, and Delete operations on a list of tasks. Data is stored in a SQLite database (`tasks.db`), created automatically the first time the app runs.
+A REST API supporting Create, Read, Update, and Delete operations on a list of tasks, now backed by PostgreSQL running in Docker.
 
-## Why SQLite
-
-SQLite needs no separate server or installation — the entire database is a single file that Python's built-in `sqlite3` module creates automatically. It's the simplest way to move from "data disappears on restart" to "data persists," without the setup overhead of a full database server like Postgres. That tradeoff (zero-config, single-file, single-machine) is the right fit for this stage of the project.
-
-## Where the database file is stored
-
-`tasks.db`, created automatically in the project root the first time the app starts. It's git-ignored (see `.gitignore`) — each fresh clone creates and seeds its own database rather than inheriting one.
-
+## Architecture
+ 
+Database logic lives entirely in `repository.py` — a single module implementing `get_db()` and `init_db()`. `main.py`'s routes call these functions but contain no direct database connection logic themselves. This separation is what let the storage swap from SQLite to Postgres happen without changing a single route's behavior or shape.
+ 
 ## How to run it
-
-1. Install dependencies:
+ 
+**Requires:** Docker Desktop (or Podman) installed and running.
+ 
+1. Copy the example environment file:
 ```bash
-pip install fastapi uvicorn --break-system-packages
+cp .env.example .env
 ```
-
-2. Start the server:
+ 
+2. Start the whole stack (app + Postgres) with one command:
 ```bash
-uvicorn main:app --reload --port 8000
+docker compose up
 ```
+ 
+The `tasks` table is created automatically and seeded with 3 example tasks on first run. Visit `http://localhost:8000/docs` for interactive API documentation.
+ 
+**Running without Docker** (for local development): install dependencies with `pip install -r requirements.txt --break-system-packages`, make sure a Postgres instance is reachable at the URL in `.env`, and run `uvicorn main:app --reload --port 8000`.
 
-3. Visit `http://localhost:8000/docs` for interactive API documentation.
-
-On first run, `tasks.db` and the `tasks` table are created automatically, seeded with 3 example tasks.
-
+## Environment variables
+ 
+See `.env.example`. Only one variable is required:
+ 
+| Variable | Description |
+|----------|-------------|
+| `DATABASE_URL` | Postgres connection string. Inside `docker compose`, the host is `db` (the service name); when running locally outside Docker, it's `localhost`. |
+ 
+`.env` is git-ignored — never commit real credentials.
+ 
 ## Endpoints
-
+ 
 | Method | Path | Description | Success code |
 |--------|------|-------------|--------------|
 | GET | `/` | API info | 200 |
 | GET | `/health` | Health check | 200 |
-| GET | `/tasks` | List all tasks | 200 |
+| GET | `/tasks` | List all tasks (supports `?search=`, `?done=`, `?sort=title`) | 200 |
 | GET | `/tasks/{task_id}` | Get one task | 200 (404 if not found) |
 | POST | `/tasks` | Create a task | 201 (400 if title missing/empty) |
 | PUT | `/tasks/{task_id}` | Update a task's title | 200 (404 if not found, 400 if invalid) |
 | DELETE | `/tasks/{task_id}` | Delete a task | 204 (404 if not found) |
-
+| GET | `/stats` | Task counts (total/done/open), computed in SQL | 200 |
+ 
 ## Example request
-
+ 
 ```powershell
 Invoke-WebRequest -UseBasicParsing -Uri http://localhost:8000/tasks -Method POST -Body '{"title":"Buy milk"}' -ContentType "application/json"
 ```
@@ -51,17 +64,17 @@ Invoke-WebRequest -UseBasicParsing -Uri http://localhost:8000/tasks -Method POST
 ```
 StatusCode        : 201
 StatusDescription : Created
-Content           : {"id":4,"title":"Buy milk","done":0}
+Content           : {"id":5,"title":"Buy milk","done":false}
 RawContent        : HTTP/1.1 201 Created
                     Content-Length: 40
                     Content-Type: application/json
-                    Date: Sat, 08 Aug 2026 03:02:09 GMT
+                    Date: Sun, 23 Aug 2026 21:41:00 GMT
                     Server: uvicorn
 
-                    {"id":4,"title":"Buy milk","done":0}
+                    {"id":5,"title":"Buy milk","done":false}
 Forms             :
-Headers           : {[Content-Length, 40], [Content-Type, application/json], [Date, Sat, 08 Aug 2026 03:02:09
-                    GMT], [Server, uvicorn]}
+Headers           : {[Content-Length, 40], [Content-Type, application/json], [Date, Sun, 23 Aug 2026 21:41:00 GMT],
+                    [Server, uvicorn]}
 Images            : {}
 InputFields       : {}
 Links             : {}
@@ -71,9 +84,28 @@ RawContentLength  : 40
 
 ## Persistence proof
 
-Created a task via POST, restarted the server completely, and confirmed via both `GET /tasks` and a direct SQLite query that the task was still present — proving the data lives in the file, not in memory.
+Created a task via POST, then ran a full `docker compose down` followed by `docker compose up` — a complete teardown and rebuild of both containers, not just a restart. The task was still present afterward, proving the named Docker volume (`taskdata`) — not the container itself — is what holds the actual data.
 
-## Exploring the database directly (Stage 4)
+## Viewing the database directly
+ 
+```bash
+docker exec -it taskdb psql -U postgres -d tasks -c "SELECT * FROM tasks;"
+```
+ 
+```
+ id |            title             | done
+----+-------------------------------+------
+  1 | Buy milk                      | f
+  2 | Write report                  | f
+  3 | Walk the dog                  | t
+  4 | Compose persistence test      | f
+```
+
+## A debugging note worth keeping
+ 
+The default `postgres:latest` image (Postgres 18) uses a different internal data directory layout than the `-v taskdata:/var/lib/postgresql/data` mount convention this assignment uses, and fails to start with that mount path. Pinning to `postgres:16` fixed it. Separately, the app container initially raced ahead of the database container — `depends_on` alone only waits for the container to *start*, not for Postgres to finish initializing inside it — fixed by adding a `healthcheck` (`pg_isready`) to the `db` service and changing `depends_on` to require `condition: service_healthy`.
+ 
+## Exploring the database directly
 
 Opened `tasks.db` in DB Browser for SQLite and ran several queries by hand, including:
 
