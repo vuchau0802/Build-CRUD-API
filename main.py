@@ -1,3 +1,5 @@
+from fastapi import FastAPI, HTTPException, Query, Request
+
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional
@@ -95,3 +97,16 @@ def login(creds: AuthCredentials):
         "access_token": result.session.access_token,
         "refresh_token": result.session.refresh_token
     }
+
+@app.get("/public/info", summary="Public info, no auth required")
+def public_info():
+    return {"message": "Welcome stranger! This info is public."}
+
+@app.get("/protected/profile", summary="Get the logged-in user's profile")
+def protected_profile(request: Request):
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer ") or len(auth_header.split(" ")) != 2:
+        raise HTTPException(status_code=401, detail="Access token required")
+    token = auth_header.split(" ")[1]
+    # Not verifying yet — Stage 3 adds that
+    return {"message": "token received, not yet verified"}
