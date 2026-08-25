@@ -101,6 +101,6 @@ Requests to newly added routes kept returning `404`/stale behavior even after sa
 
 Before moving to Postgres, this project ran on SQLite (`tasks.db`). Opened it in DB Browser for SQLite and ran several queries by hand, including `UPDATE tasks SET done = 1;` followed by `DELETE FROM tasks WHERE done = 1;` — since the `UPDATE` had no `WHERE` clause, it marked every task done, and the `DELETE` removed all of them. A direct demonstration of why unscoped `UPDATE`/`DELETE` statements are dangerous in a real system.
 
-## Database viewer (SQLite stage)
+## Database viewer
 
 ![DB Browser screenshot](DBBrowser.png)
