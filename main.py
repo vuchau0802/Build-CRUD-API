@@ -2,8 +2,10 @@ from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional
 import repository
+from auth import supabase
 
 app = FastAPI()
+print("Server running and connected to Supabase")
 
 repository.init_db()
 
