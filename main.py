@@ -1,20 +1,19 @@
 from fastapi import FastAPI, HTTPException, Query, Request, Depends
+from fastapi.security import HTTPBearer
 from pydantic import BaseModel
 from typing import Optional
 import repository
 from auth import supabase
 
 app = FastAPI()
+security_scheme = HTTPBearer()
 print("Server running and connected to Supabase")
 
 repository.init_db()
 
 
-def get_current_user(request: Request):
-    auth_header = request.headers.get("Authorization")
-    if not auth_header or not auth_header.startswith("Bearer ") or len(auth_header.split(" ")) != 2:
-        raise HTTPException(status_code=401, detail="Access token required")
-    token = auth_header.split(" ")[1]
+def get_current_user(request: Request, credentials = Depends(security_scheme)):
+    token = credentials.credentials
     try:
         result = supabase.auth.get_user(token)
     except Exception:
