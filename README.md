@@ -1,137 +1,106 @@
 # Task API
 
-A CRUD API for managing a to-do list, built with FastAPI as part of the FlyRank Backend AI Engineering internship. The project has evolved through three storage backends while its endpoints stayed identical:
- 
+A CRUD API for managing a to-do list, built with FastAPI as part of the FlyRank Backend AI Engineering internship. The project has evolved across four stages while its task endpoints stayed functionally identical:
+
 1. **In-memory** — data lost on restart
 2. **SQLite** — data in a single file, survives a restart
-3. **PostgreSQL in Docker** — a real database server, running in a container alongside the app, started together with one command
+3. **PostgreSQL in Docker** — a real database server, containerized, started with one command
+4. **Auth with Supabase** — the API is no longer wide open; protected routes require a verified login
 
 ## What this is
 
-A REST API supporting Create, Read, Update, and Delete operations on a list of tasks, now backed by PostgreSQL running in Docker.
+A REST API for managing tasks (CRUD, backed by Postgres in Docker) plus a full authentication layer: sign up, log in, log out, and route-level protection using Supabase as the Identity Provider.
 
 ## Architecture
- 
-Database logic lives entirely in `repository.py` — a single module implementing `get_db()` and `init_db()`. `main.py`'s routes call these functions but contain no direct database connection logic themselves. This separation is what let the storage swap from SQLite to Postgres happen without changing a single route's behavior or shape.
- 
+
+- `repository.py` — all task-related SQL, implementing `list_tasks`, `get_task`, `create_task`, `update_task`, `delete_task`, `get_stats`. Routes never contain SQL.
+- `auth.py` — initializes the Supabase client from environment variables.
+- `main.py` — routes only. Auth routes call the Supabase SDK directly (signup/login/logout); protected routes use a single reusable dependency, `get_current_user`, which verifies the bearer token with Supabase before the route body runs.
+
 ## How to run it
- 
-**Requires:** Docker Desktop (or Podman) installed and running.
- 
-1. Copy the example environment file:
+
+**Requires:** Docker Desktop (or Podman) installed and running, plus a free Supabase project.
+
+1. Create a project at [supabase.com](https://supabase.com), then under **Project Settings → API Keys**, copy your **Project URL** and **Publishable key**. Under **Authentication → Providers → Email**, turn off "Confirm email" for local testing.
+
+2. Copy the example environment file and fill in your real values:
 ```bash
 cp .env.example .env
 ```
- 
-2. Start the whole stack (app + Postgres) with one command:
+
+3. Start the whole stack:
 ```bash
 docker compose up
 ```
- 
-The `tasks` table is created automatically and seeded with 3 example tasks on first run. Visit `http://localhost:8000/docs` for interactive API documentation.
- 
-**Running without Docker** (for local development): install dependencies with `pip install -r requirements.txt --break-system-packages`, make sure a Postgres instance is reachable at the URL in `.env`, and run `uvicorn main:app --reload --port 8000`.
+
+The `tasks` table is created automatically and seeded with 3 example tasks on first run. Visit `http://localhost:8000/docs` for interactive API documentation, including a bearer-token "Authorize" button for the protected routes.
+
+**Running without Docker** (local development): `pip install -r requirements.txt --break-system-packages`, ensure Postgres is reachable at the URL in `.env`, then `uvicorn main:app --reload --port 8000`.
 
 ## Environment variables
- 
-See `.env.example`. Only one variable is required:
- 
+
+See `.env.example`.
+
 | Variable | Description |
 |----------|-------------|
-| `DATABASE_URL` | Postgres connection string. Inside `docker compose`, the host is `db` (the service name); when running locally outside Docker, it's `localhost`. |
- 
+| `DATABASE_URL` | Postgres connection string (`db` as host inside Docker Compose, `localhost` when run locally) |
+| `SUPABASE_URL` | Your Supabase project URL |
+| `SUPABASE_KEY` | Your Supabase **Publishable key** (safe to use client-side — never use the Secret key here) |
+| `PORT` | Port the app listens on (8000) |
+
 `.env` is git-ignored — never commit real credentials.
- 
+
 ## Endpoints
- 
-| Method | Path | Description | Success code |
-|--------|------|-------------|--------------|
-| GET | `/` | API info | 200 |
-| GET | `/health` | Health check | 200 |
-| GET | `/tasks` | List all tasks (supports `?search=`, `?done=`, `?sort=title`) | 200 |
-| GET | `/tasks/{task_id}` | Get one task | 200 (404 if not found) |
-| POST | `/tasks` | Create a task | 201 (400 if title missing/empty) |
-| PUT | `/tasks/{task_id}` | Update a task's title | 200 (404 if not found, 400 if invalid) |
-| DELETE | `/tasks/{task_id}` | Delete a task | 204 (404 if not found) |
-| GET | `/stats` | Task counts (total/done/open), computed in SQL | 200 |
- 
-## Example request
- 
+
+| Method | Path | Auth required? | Description | Success code |
+|--------|------|-----------------|--------------|---------------|
+| GET | `/` | No | API info | 200 |
+| GET | `/health` | No | Health check | 200 |
+| GET | `/public/info` | No | Public message | 200 |
+| POST | `/auth/signup` | No | Create a Supabase user account | 201 (400 if missing fields) |
+| POST | `/auth/login` | No | Log in, returns access + refresh tokens | 200 (400 missing fields, 401 wrong credentials) |
+| POST | `/auth/logout` | **Yes** | End the current session | 204 |
+| GET | `/protected/profile` | **Yes** | Get the logged-in user's id/email/created_at | 200 (401 if missing/invalid token) |
+| GET | `/protected/dashboard` | **Yes** | Example second protected route, same guard reused | 200 (401 if missing/invalid token) |
+| GET | `/tasks` | No | List tasks (supports `?search=`, `?done=`, `?sort=title`) | 200 |
+| GET | `/tasks/{task_id}` | No | Get one task | 200 (404 if not found) |
+| POST | `/tasks` | No | Create a task | 201 (400 if title missing/empty) |
+| PUT | `/tasks/{task_id}` | No | Update a task's title | 200 (404 not found, 400 invalid) |
+| DELETE | `/tasks/{task_id}` | No | Delete a task | 204 (404 if not found) |
+| GET | `/stats` | No | Task counts computed in SQL | 200 |
+
+## Example auth flow
+
 ```powershell
-Invoke-WebRequest -UseBasicParsing -Uri http://localhost:8000/tasks -Method POST -Body '{"title":"Buy milk"}' -ContentType "application/json"
+# Sign up
+Invoke-WebRequest -UseBasicParsing -Uri http://localhost:8000/auth/signup -Method POST -Body '{"email":"test@example.com","password":"password123"}' -ContentType "application/json"
+# -> 201, Supabase user object
+
+# Log in
+Invoke-WebRequest -UseBasicParsing -Uri http://localhost:8000/auth/login -Method POST -Body '{"email":"test@example.com","password":"password123"}' -ContentType "application/json"
+# -> 200, { "access_token": "...", ... }
+
+# Call a protected route
+Invoke-WebRequest -UseBasicParsing -Uri http://localhost:8000/protected/profile -Headers @{Authorization="Bearer <access_token>"}
+# -> 200, { "id": "...", "email": "...", ... }
 ```
 
-```
-StatusCode        : 201
-StatusDescription : Created
-Content           : {"id":5,"title":"Buy milk","done":false}
-RawContent        : HTTP/1.1 201 Created
-                    Content-Length: 40
-                    Content-Type: application/json
-                    Date: Sun, 23 Aug 2026 21:41:00 GMT
-                    Server: uvicorn
+Changing even one character of a valid token and retrying the same request returns `401 {"detail":"Invalid or expired token"}` — proving Supabase is genuinely verifying the token's signature, not just checking that *something* was sent.
 
-                    {"id":5,"title":"Buy milk","done":false}
-Forms             :
-Headers           : {[Content-Length, 40], [Content-Type, application/json], [Date, Sun, 23 Aug 2026 21:41:00 GMT],
-                    [Server, uvicorn]}
-Images            : {}
-InputFields       : {}
-Links             : {}
-ParsedHtml        :
-RawContentLength  : 40
-```
+## Swagger UI with bearer auth
 
-## Persistence proof
+`/docs` shows a padlock icon on every protected route. Click **Authorize**, paste an access token (no need to type "Bearer " — Swagger adds it), and "Try it out" works directly from the browser with no curl needed.
 
-Created a task via POST, then ran a full `docker compose down` followed by `docker compose up` — a complete teardown and rebuild of both containers, not just a restart. The task was still present afterward, proving the named Docker volume (`taskdata`) — not the container itself — is what holds the actual data.
-
-## Viewing the database directly
- 
-```bash
-docker exec -it taskdb psql -U postgres -d tasks -c "SELECT * FROM tasks;"
-```
- 
-```
- id |            title             | done
-----+-------------------------------+------
-  1 | Buy milk                      | f
-  2 | Write report                  | f
-  3 | Walk the dog                  | t
-  4 | Compose persistence test      | f
-```
+![Swagger UI screenshot](Swagger1.png)
 
 ## A debugging note worth keeping
- 
-The default `postgres:latest` image (Postgres 18) uses a different internal data directory layout than the `-v taskdata:/var/lib/postgresql/data` mount convention this assignment uses, and fails to start with that mount path. Pinning to `postgres:16` fixed it. Separately, the app container initially raced ahead of the database container — `depends_on` alone only waits for the container to *start*, not for Postgres to finish initializing inside it — fixed by adding a `healthcheck` (`pg_isready`) to the `db` service and changing `depends_on` to require `condition: service_healthy`.
- 
-## Exploring the database directly
 
-Opened `tasks.db` in DB Browser for SQLite and ran several queries by hand, including:
+Requests to newly added routes kept returning `404`/stale behavior even after saving `main.py`, despite `uvicorn --reload` running. The actual cause: `docker compose`'s `api` container was also bound to port 8000, serving an old Docker image built days earlier — so local requests were silently hitting stale containerized code instead of the locally edited file. Fixed by stopping the compose `api` container (`docker stop buildfirstcrudapi-api-1`) while doing local development, since only one process can hold a port at a time. Worth remembering: running the same port both locally and in Docker Compose simultaneously is a silent trap, not an error message.
 
-```sql
-SELECT * FROM tasks;
-SELECT * FROM tasks WHERE done = 1;
-SELECT COUNT(*) FROM tasks;
-UPDATE tasks SET done = 1;
-DELETE FROM tasks WHERE done = 1;
-```
+## Exploring SQLite directly
 
-Running `UPDATE` without a `WHERE` clause marked every task as done, so the following `DELETE` removed all of them — a direct demonstration of why unscoped `UPDATE`/`DELETE` statements are dangerous in a real system. `GET /tasks` on the running API reflected the empty table instantly, with no restart needed, proving the API and DB Browser read the exact same file with no syncing step in between.
+Before moving to Postgres, this project ran on SQLite (`tasks.db`). Opened it in DB Browser for SQLite and ran several queries by hand, including `UPDATE tasks SET done = 1;` followed by `DELETE FROM tasks WHERE done = 1;` — since the `UPDATE` had no `WHERE` clause, it marked every task done, and the `DELETE` removed all of them. A direct demonstration of why unscoped `UPDATE`/`DELETE` statements are dangerous in a real system.
 
-**Example query:**
-```sql
-SELECT COUNT(*) FROM tasks;
-```
-**Result:** `0` — returned after running `UPDATE tasks SET done = 1;` followed by `DELETE FROM tasks WHERE done = 1;` on the seeded table. The `UPDATE` had no `WHERE` clause, so it marked every task as done, and the following `DELETE` removed all of them — a direct demonstration of why unscoped `UPDATE`/`DELETE` statements are dangerous in a real system.
- 
-`GET /tasks` on the running API reflected the empty table instantly, with no restart needed, proving the API and DB Browser read the exact same file with no syncing step in between.
-
-## Swagger UI
-
-![Swagger UI screenshot](Swagger.png)
-
-## Database viewer
+## Database viewer (SQLite stage)
 
 ![DB Browser screenshot](DBBrowser.png)
-
