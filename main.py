@@ -68,3 +68,30 @@ def delete_task(task_id: int):
     deleted = repository.delete_task(task_id)
     if not deleted:
         raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+
+class AuthCredentials(BaseModel):
+    email: str = ""
+    password: str = ""
+
+@app.post("/auth/signup", status_code=201, summary="Create a new user account")
+def signup(creds: AuthCredentials):
+    if not creds.email or not creds.password:
+        raise HTTPException(status_code=400, detail="email and password are required")
+    try:
+        result = supabase.auth.sign_up({"email": creds.email, "password": creds.password})
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"user": result.user}
+
+@app.post("/auth/login", summary="Authenticate and return a JWT")
+def login(creds: AuthCredentials):
+    if not creds.email or not creds.password:
+        raise HTTPException(status_code=400, detail="email and password are required")
+    try:
+        result = supabase.auth.sign_in_with_password({"email": creds.email, "password": creds.password})
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Invalid login credentials")
+    return {
+        "access_token": result.session.access_token,
+        "refresh_token": result.session.refresh_token
+    }
