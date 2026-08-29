@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+import re
 import requests
 import time
 from pathlib import Path
@@ -23,6 +25,7 @@ def fetch(url: str, cache_name: str) -> str:
     print(f"FETCH: {url}")
     headers = {"User-Agent": USER_AGENT}
     response = requests.get(url, headers=headers, timeout=TIMEOUT)
+    response.encoding = response.apparent_encoding
 
     if response.status_code != 200:
         raise RuntimeError(f"Failed to fetch {url}: status {response.status_code}")
@@ -60,7 +63,46 @@ def discover_book_urls():
     unique_urls = list(dict.fromkeys(all_urls))  # de-dupe, preserve order
     return unique_urls
 
+def extract_book(url: str, source_page: str) -> dict:
+    """Fetch one book detail page and extract its raw fields."""
+    # Use a safe filename derived from the URL for caching
+    cache_name = re.sub(r"[^a-zA-Z0-9]+", "_", url) + ".html"
+    html = fetch(url, cache_name)
+    soup = BeautifulSoup(html, "html.parser")
+
+    title = soup.select_one("div.product_main h1").get_text(strip=True)
+
+    price_text = soup.select_one("p.price_color").get_text(strip=True)
+
+    availability_text = soup.select_one("p.availability").get_text(strip=True)
+
+    rating_tag = soup.select_one("p.star-rating")
+    rating_classes = rating_tag.get("class", [])
+    rating_text = next((c for c in rating_classes if c != "star-rating"), None)
+
+    description_tag = soup.select_one("#product_description ~ p")
+    description = description_tag.get_text(strip=True) if description_tag else None
+
+    return {
+        "title": title,
+        "product_url": url,
+        "price_text": price_text,
+        "availability_text": availability_text,
+        "rating_text": rating_text,
+        "description": description,
+        "source_page": source_page,
+        "fetched_at": datetime.now(timezone.utc).isoformat()
+    }
+
 
 if __name__ == "__main__":
     urls = discover_book_urls()
     print(f"catalogue_pages=3 discovered={len(urls)} unique_urls={len(urls)}")
+
+    records = []
+    for url in urls:
+        record = extract_book(url, "https://books.toscrape.com/catalogue/page-1.html")
+        records.append(record)
+
+    print(f"detail_pages={len(records)}")
+    print(records[0])
