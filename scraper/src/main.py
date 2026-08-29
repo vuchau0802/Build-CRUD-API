@@ -37,9 +37,9 @@ def fetch(url: str, cache_name: str) -> str:
     return response.text
 
 def discover_book_urls():
-    """Fetch catalogue pages 1-3, following 'next' links, and return all unique book URLs."""
+    """Fetch catalogue pages 1-3, following 'next' links, and return (url, source_page) pairs."""
     base_url = "https://books.toscrape.com/catalogue/page-1.html"
-    all_urls = []
+    all_pairs = []
     current_url = base_url
     page_num = 1
 
@@ -51,7 +51,7 @@ def discover_book_urls():
         for link in soup.select("h3 a"):
             href = link.get("href")
             absolute_url = urljoin(current_url, href)
-            all_urls.append(absolute_url)
+            all_pairs.append((absolute_url, current_url))
 
         next_link = soup.select_one("li.next a")
         if next_link and page_num < 3:
@@ -60,8 +60,13 @@ def discover_book_urls():
         else:
             break
 
-    unique_urls = list(dict.fromkeys(all_urls))  # de-dupe, preserve order
-    return unique_urls
+    seen = set()
+    unique_pairs = []
+    for url, source in all_pairs:
+        if url not in seen:
+            seen.add(url)
+            unique_pairs.append((url, source))
+    return unique_pairs
 
 def extract_book(url: str, source_page: str) -> dict:
     """Fetch one book detail page and extract its raw fields."""
@@ -96,13 +101,14 @@ def extract_book(url: str, source_page: str) -> dict:
 
 
 if __name__ == "__main__":
-    urls = discover_book_urls()
-    print(f"catalogue_pages=3 discovered={len(urls)} unique_urls={len(urls)}")
+    pairs = discover_book_urls()
+    print(f"catalogue_pages=3 discovered={len(pairs)} unique_urls={len(pairs)}")
 
     records = []
-    for url in urls:
-        record = extract_book(url, "https://books.toscrape.com/catalogue/page-1.html")
+    for url, source_page in pairs:
+        record = extract_book(url, source_page)
         records.append(record)
 
     print(f"detail_pages={len(records)}")
     print(records[0])
+    print(records[-1])  # check a book from a later page has the right source_page
