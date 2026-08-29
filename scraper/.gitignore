@@ -1,1 +1,2 @@
-cache/*.html'n__pycache__/
+cache/*.html
+__pycache__/
