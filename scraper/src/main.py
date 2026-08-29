@@ -1,6 +1,8 @@
 import requests
 import time
 from pathlib import Path
+from bs4 import BeautifulSoup
+from urllib.parse import urljoin
 
 CACHE_DIR = Path(__file__).parent.parent / "cache"
 CACHE_DIR.mkdir(exist_ok=True)
@@ -31,10 +33,34 @@ def fetch(url: str, cache_name: str) -> str:
     time.sleep(DELAY)
     return response.text
 
+def discover_book_urls():
+    """Fetch catalogue pages 1-3, following 'next' links, and return all unique book URLs."""
+    base_url = "https://books.toscrape.com/catalogue/page-1.html"
+    all_urls = []
+    current_url = base_url
+    page_num = 1
+
+    while page_num <= 3:
+        cache_name = f"catalogue-page-{page_num}.html"
+        html = fetch(current_url, cache_name)
+        soup = BeautifulSoup(html, "html.parser")
+
+        for link in soup.select("h3 a"):
+            href = link.get("href")
+            absolute_url = urljoin(current_url, href)
+            all_urls.append(absolute_url)
+
+        next_link = soup.select_one("li.next a")
+        if next_link and page_num < 3:
+            current_url = urljoin(current_url, next_link.get("href"))
+            page_num += 1
+        else:
+            break
+
+    unique_urls = list(dict.fromkeys(all_urls))  # de-dupe, preserve order
+    return unique_urls
+
 
 if __name__ == "__main__":
-    html = fetch(
-        "https://books.toscrape.com/catalogue/page-1.html",
-        "catalogue-page-1.html"
-    )
-    print(f"Page 1 fetched, {len(html)} characters total.")
+    urls = discover_book_urls()
+    print(f"catalogue_pages=3 discovered={len(urls)} unique_urls={len(urls)}")
