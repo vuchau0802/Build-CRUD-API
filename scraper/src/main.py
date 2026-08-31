@@ -136,15 +136,25 @@ def normalize_and_validate(raw_record: dict) -> BookRecord:
     )
 
 if __name__ == "__main__":
+    run_start = time.time()
+    started_at = datetime.now(timezone.utc).isoformat()
+
     pairs = discover_book_urls()
     print(f"catalogue_pages=3 discovered={len(pairs)} unique_urls={len(pairs)}")
 
     raw_records = []
-    for url, source_page in pairs:
-        record = extract_book(url, source_page)
-        raw_records.append(record)
+    failed_pages = 0
+    cache_hits_before = sum(1 for f in CACHE_DIR.glob("*.html"))
 
-    print(f"detail_pages={len(raw_records)}")
+    for url, source_page in pairs:
+        try:
+            record = extract_book(url, source_page)
+            raw_records.append(record)
+        except Exception as e:
+            print(f"FAILED: {url} ({e})")
+            failed_pages += 1
+
+    print(f"detail_pages={len(raw_records)} failed_pages={failed_pages}")
 
     valid_records = []
     invalid_records = []
@@ -169,4 +179,23 @@ if __name__ == "__main__":
     with open(output_dir / "errors.json", "w", encoding="utf-8") as f:
         json.dump(invalid_records, f, indent=2, ensure_ascii=False)
 
-    print(f"valid={len(valid_records)} invalid={len(invalid_records)}")
+    run_end = time.time()
+    cache_hits_after = sum(1 for f in CACHE_DIR.glob("*.html"))
+
+    report = {
+        "started_at": started_at,
+        "duration_seconds": round(run_end - run_start, 2),
+        "catalogue_pages_fetched": 3,
+        "detail_pages_attempted": len(pairs),
+        "detail_pages_succeeded": len(raw_records),
+        "failed_pages": failed_pages,
+        "valid_records": len(valid_records),
+        "invalid_records": len(invalid_records),
+        "cache_files_present": cache_hits_after
+    }
+
+    with open(output_dir / "run-report.json", "w", encoding="utf-8") as f:
+        json.dump(report, f, indent=2)
+
+    print(f"valid={len(valid_records)} invalid={len(invalid_records)} failed_pages={failed_pages}")
+    print(report)
