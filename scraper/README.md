@@ -86,7 +86,3 @@ A clean run's actual `output/run-report.json`:
 ## Ethics note
 
 This scraper only touches a site explicitly built and offered for scraping practice. In general: use an official API when one exists rather than scraping; never bypass logins, paywalls, or explicit blocks; collect only the data actually needed for the stated purpose; and re-check a site's rules and terms before reusing any of this code elsewhere.
-
-## One honest limitation
-
-Retry logic is minimal — a failed page is logged and skipped, but not automatically retried with backoff. A `5xx` server error and a `404` are currently treated the same way (both just counted as failed and skipped), when ideally a `5xx` would warrant one retry after a short wait, since it may be transient, while a `404` should not be retried at all. This is intentionally left simple per the assignment's own guidance not to gold-plate this stage — proper retry rules with exponential backoff are covered in the next assignment (A16).
