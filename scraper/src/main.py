@@ -5,6 +5,9 @@ import time
 from pathlib import Path
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
+from pydantic import BaseModel, ValidationError
+import json
+
 
 CACHE_DIR = Path(__file__).parent.parent / "cache"
 CACHE_DIR.mkdir(exist_ok=True)
@@ -99,16 +102,71 @@ def extract_book(url: str, source_page: str) -> dict:
         "fetched_at": datetime.now(timezone.utc).isoformat()
     }
 
+class BookRecord(BaseModel):
+    title: str
+    product_url: str
+    price_gbp: float
+    price_text: str
+    availability_text: str
+    rating_text: str
+    description: str | None
+    source_page: str
+    fetched_at: str
+
+
+def normalize_price(price_text: str) -> float:
+    """Turn '£51.77' into 51.77"""
+    cleaned = price_text.replace("£", "").replace(",", "").strip()
+    return float(cleaned)
+
+
+def normalize_and_validate(raw_record: dict) -> BookRecord:
+    """Convert a raw record into a validated BookRecord, or raise ValidationError."""
+    price_gbp = normalize_price(raw_record["price_text"])
+    return BookRecord(
+        title=raw_record["title"],
+        product_url=raw_record["product_url"],
+        price_gbp=price_gbp,
+        price_text=raw_record["price_text"],
+        availability_text=raw_record["availability_text"],
+        rating_text=raw_record["rating_text"],
+        description=raw_record["description"],
+        source_page=raw_record["source_page"],
+        fetched_at=raw_record["fetched_at"]
+    )
 
 if __name__ == "__main__":
     pairs = discover_book_urls()
     print(f"catalogue_pages=3 discovered={len(pairs)} unique_urls={len(pairs)}")
 
-    records = []
+    raw_records = []
     for url, source_page in pairs:
         record = extract_book(url, source_page)
-        records.append(record)
+        raw_records.append(record)
 
-    print(f"detail_pages={len(records)}")
-    print(records[0])
-    print(records[-1])  # check a book from a later page has the right source_page
+    print(f"detail_pages={len(raw_records)}")
+
+    valid_records = []
+    invalid_records = []
+    seen_urls = set()
+
+    for raw in raw_records:
+        if raw["product_url"] in seen_urls:
+            continue
+        seen_urls.add(raw["product_url"])
+        try:
+            validated = normalize_and_validate(raw)
+            valid_records.append(validated.model_dump())
+        except (ValidationError, ValueError) as e:
+            invalid_records.append({"record": raw, "reason": str(e)})
+
+    output_dir = Path(__file__).parent.parent / "output"
+    output_dir.mkdir(exist_ok=True)
+
+    with open(output_dir / "books.json", "w", encoding="utf-8") as f:
+        json.dump(valid_records, f, indent=2, ensure_ascii=False)
+
+    with open(output_dir / "errors.json", "w", encoding="utf-8") as f:
+        json.dump(invalid_records, f, indent=2, ensure_ascii=False)
+
+    print(f"valid={len(valid_records)} invalid={len(invalid_records)}")
