@@ -4,6 +4,8 @@ from pydantic import BaseModel
 from typing import Optional
 import repository
 from auth import supabase
+from llm_enrich import EnrichRequest, EnrichResponse, enrich_stub
+import os
 
 app = FastAPI()
 security_scheme = HTTPBearer()
@@ -133,3 +135,9 @@ def logout(user=Depends(get_current_user)):
 @app.get("/protected/dashboard", summary="Example second protected route")
 def protected_dashboard(user=Depends(get_current_user)):
     return {"message": f"Welcome to your dashboard, {user.email}"}
+
+@app.post("/enrich", response_model=EnrichResponse, summary="Enrich a scraped book record")
+def enrich(request: EnrichRequest):
+    if os.environ.get("LLM_STUB") == "1":
+        return enrich_stub(request)
+    raise HTTPException(status_code=501, detail="Real model call not implemented yet (Stage 2)")
