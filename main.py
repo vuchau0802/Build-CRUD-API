@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from typing import Optional
 import repository
 from auth import supabase
-from llm_enrich import EnrichRequest, EnrichResponse, enrich_stub, call_model
+from llm_enrich import EnrichRequest, EnrichResponse, enrich_stub, call_model, EnrichmentFailed
 import os
 
 app = FastAPI()
@@ -136,9 +136,11 @@ def logout(user=Depends(get_current_user)):
 def protected_dashboard(user=Depends(get_current_user)):
     return {"message": f"Welcome to your dashboard, {user.email}"}
 
-@app.post("/enrich", summary="Enrich a scraped book record")
+@app.post("/enrich", response_model=EnrichResponse, summary="Enrich a scraped book record")
 def enrich(request: EnrichRequest):
     if os.environ.get("LLM_STUB") == "1":
         return enrich_stub(request)
-    raw_text = call_model(request)
-    return {"raw_model_output": raw_text}
+    try:
+        return call_model(request)
+    except EnrichmentFailed as e:
+        raise HTTPException(status_code=422, detail=f"Model output could not be validated: {e}")
