@@ -4,8 +4,9 @@ from pydantic import BaseModel
 from typing import Optional
 import repository
 from auth import supabase
-from llm_enrich import EnrichRequest, EnrichResponse, enrich_stub, call_model, EnrichmentFailed
+from llm_enrich import EnrichRequest, EnrichResponse, enrich_stub, call_model, EnrichmentFailed, EnrichmentTimedOut, EnrichmentDisabled
 import os
+from openai import AuthenticationError, PermissionDeniedError, BadRequestError
 
 app = FastAPI()
 security_scheme = HTTPBearer()
@@ -142,5 +143,15 @@ def enrich(request: EnrichRequest):
         return enrich_stub(request)
     try:
         return call_model(request)
+    except EnrichmentDisabled:
+        raise HTTPException(status_code=503, detail="Enrichment is currently disabled")
+    except EnrichmentTimedOut:
+        raise HTTPException(status_code=504, detail="Model call timed out")
     except EnrichmentFailed as e:
         raise HTTPException(status_code=422, detail=f"Model output could not be validated: {e}")
+    except AuthenticationError:
+        raise HTTPException(status_code=401, detail="LLM provider rejected the API key")
+    except PermissionDeniedError:
+        raise HTTPException(status_code=403, detail="LLM provider denied the request")
+    except BadRequestError as e:
+        raise HTTPException(status_code=400, detail=f"Bad request to LLM provider: {e}")
