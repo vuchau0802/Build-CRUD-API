@@ -43,6 +43,48 @@ def get_report_data() -> dict:
     }
 
 
+def init_reports_table():
+    conn = get_db()
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS reports (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            path TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+
+def insert_report(path: str, created_at: str) -> int:
+    conn = get_db()
+    cursor = conn.execute(
+        "INSERT INTO reports (path, created_at) VALUES (?, ?)",
+        (path, created_at),
+    )
+    conn.commit()
+    new_id = cursor.lastrowid
+    conn.close()
+    return new_id
+
+
+def get_report_by_id(report_id: int):
+    conn = get_db()
+    row = conn.execute("SELECT * FROM reports WHERE id = ?", (report_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_latest_report_today(today_date: str):
+    conn = get_db()
+    row = conn.execute(
+        "SELECT * FROM reports WHERE created_at LIKE ? ORDER BY id DESC LIMIT 1",
+        (f"{today_date}%",),
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
 if __name__ == "__main__":
     import json
     data = get_report_data()
