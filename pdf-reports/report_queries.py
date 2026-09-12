@@ -27,6 +27,11 @@ def get_report_data() -> dict:
     ).fetchall()
     books_per_rating = [dict(row) for row in books_per_rating]
 
+    all_books = conn.execute(
+        "SELECT title, price, rating FROM books ORDER BY title"
+    ).fetchall()
+    all_books = [dict(row) for row in all_books]
+
     conn.close()
 
     return {
@@ -34,6 +39,7 @@ def get_report_data() -> dict:
         "average_price": round(average_price, 2) if average_price else 0,
         "top_5_expensive": top_5_expensive,
         "books_per_rating": books_per_rating,
+        "all_books": all_books,
     }
 
 
