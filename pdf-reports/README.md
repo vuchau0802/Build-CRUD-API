@@ -37,7 +37,7 @@ curl -i -X POST http://localhost:8001/reports
 
 6. Download it:
 ```bash
-curl -o my-report.pdf http://localhost:8001/reports/1/file
+curl -o my-report.pdf http://localhost:8001/reports/file
 ```
 
 ## Aggregation SQL
@@ -91,8 +91,3 @@ Proof: two rapid `POST /reports` calls both returned `{"id": 1, ...}` with statu
 - `report_queries.py` — all SQL: the four aggregations plus the `reports` bookkeeping table (insert, lookup by id, lookup latest-today)
 - `render.py` — builds the HTML report and prints it to PDF via Playwright, with page-break-safe CSS (`break-inside: avoid`, repeating `<thead>`)
 - `main.py` — the three routes: generate, get metadata, download file
-
-## Notes
-
-- `report.db` and generated PDFs are git-ignored — the seed script and code are the recipe; the database and files are disposable, regenerable output.
-- Built as part of FlyRank's Backend AI Engineering internship track.
