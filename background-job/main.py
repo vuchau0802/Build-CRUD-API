@@ -114,4 +114,21 @@ def heartbeat(ctx: inngest.Context) -> None:
     ctx.step.run("log-summary", log_summary)
 
 
-inngest.fast_api.serve(app, inngest_client, [make_report, heartbeat])
+@inngest_client.create_function(
+    fn_id="cleanup-stale-reports",
+    trigger=inngest.TriggerCron(cron="* * * * *"),
+)
+def cleanup_stale_reports(ctx: inngest.Context) -> None:
+    def delete_old():
+        now = time.time()
+        removed = 0
+        for rid in list(reports):
+            if reports[rid]["status"] == "done" and now - reports[rid]["done_at"] > 600:
+                del reports[rid]
+                removed += 1
+        print(f"[cleanup] done reports older than 10min removed={removed} remaining={len(reports)}")
+
+    ctx.step.run("delete-old-reports", delete_old)
+
+
+inngest.fast_api.serve(app, inngest_client, [make_report, heartbeat, cleanup_stale_reports])
