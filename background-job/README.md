@@ -1,4 +1,4 @@
-# Your First Background Job
+# First Background Job
 
 A small API where slow work happens in the background instead of inside the request: the endpoint answers instantly with `202`, an Inngest function does the real work (a real LLM call, not a fake sleep), a status endpoint reports progress, and one cron job runs on the clock alone.
 
