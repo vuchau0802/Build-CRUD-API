@@ -67,7 +67,7 @@ A request with a missing or empty `topic` is rejected at the door with `400`, an
 
 (Both verified on crontab.guru. The `heartbeat` function itself uses `* * * * *` — every minute — since that's the testing schedule the assignment specifies; a real daily version would use the first expression above.)
 
-## Extras
+## Document outbox and cleanup cron
 
 - **Outbox file:** each finished `make-report` run also writes its result to `outbox/<id>.txt` — a stand-in for sending email from a job, which is where this pattern lives in real products (`outbox/` is git-ignored).
 - **Cleanup cron:** the `cleanup-stale-reports` function runs every minute and removes `done` reports older than 10 minutes — cron's most common real job is taking out the trash.
