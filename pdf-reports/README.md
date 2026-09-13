@@ -37,7 +37,7 @@ curl -i -X POST http://localhost:8001/reports
 
 6. Download it:
 ```bash
-curl -o my-report.pdf http://localhost:8001/reports/file
+curl -o my-report.pdf http://localhost:8001/reports/1/file
 ```
 
 ## Aggregation SQL
