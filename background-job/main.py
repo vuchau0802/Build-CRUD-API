@@ -5,6 +5,7 @@ from pydantic import BaseModel
 import inngest
 import inngest.fast_api
 from dotenv import load_dotenv
+import time
 
 load_dotenv()
 
@@ -89,7 +90,11 @@ def make_report(ctx: inngest.Context) -> None:
         if topic == "fail":
             raise Exception("The report oven is broken!")
         text = call_llm_about_topic(topic)
-        reports[report_id] = {"id": report_id, "topic": topic, "status": "done", "result": text}
+        done_at = time.time()
+        reports[report_id] = {"id": report_id, "topic": topic, "status": "done", "result": text, "done_at": done_at}
+        os.makedirs("outbox", exist_ok=True)
+        with open(f"outbox/{report_id}.txt", "w", encoding="utf-8") as f:
+            f.write(f"Topic: {topic}\n\n{text}")
         return text
 
     ctx.step.run("build-report", build_report)
