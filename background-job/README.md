@@ -42,6 +42,7 @@ Open `http://localhost:8288` for the dashboard.
 | Endpoint | `GET /reports` | HTTP request | Lists all reports |
 | Function | `make-report` | Event: `report/requested` | Two steps: sleeps 8s, then calls a real LLM to write about the topic; retries twice on failure |
 | Function | `heartbeat` | Cron: `* * * * *` | Logs a pending/done/failed summary every minute, no request involved |
+| Function | `cleanup-stale-reports` | Cron: `* * * * *` | Deletes `done` reports older than 10 minutes |
 
 ## The 202 → poll proof
 
@@ -65,6 +66,11 @@ A request with a missing or empty `topic` is rejected at the door with `400`, an
 - **Every Sunday at 22:00:** `0 22 * * 0`
 
 (Both verified on crontab.guru. The `heartbeat` function itself uses `* * * * *` — every minute — since that's the testing schedule the assignment specifies; a real daily version would use the first expression above.)
+
+## Extras
+
+- **Outbox file:** each finished `make-report` run also writes its result to `outbox/<id>.txt` — a stand-in for sending email from a job, which is where this pattern lives in real products (`outbox/` is git-ignored).
+- **Cleanup cron:** the `cleanup-stale-reports` function runs every minute and removes `done` reports older than 10 minutes — cron's most common real job is taking out the trash.
 
 ## Dashboard screenshot
 
