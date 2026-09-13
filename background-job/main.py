@@ -83,6 +83,8 @@ def make_report(ctx: inngest.Context) -> None:
     report_id = ctx.event.data["id"]
     topic = ctx.event.data["topic"]
 
+    ctx.step.sleep("do-the-slow-work", "8s")
+
     def build_report():
         if topic == "fail":
             raise Exception("The report oven is broken!")

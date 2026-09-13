@@ -4,7 +4,7 @@ A small API where slow work happens in the background instead of inside the requ
 
 ## What this is
 
-`POST /reports` accepts a topic and returns immediately — it does no slow work itself. It sends an event to Inngest, which triggers a background function that calls a real LLM (via OpenRouter) to write a short paragraph about the topic. `GET /reports/:id` lets the client poll for the result: `pending` first, `done` with the generated text once it finishes. A separate `heartbeat` function runs every minute on a cron schedule with no request or event involved at all, logging a summary of how many reports are pending/done/failed.
+`POST /reports` accepts a topic and returns immediately — it does no slow work itself. It sends an event to Inngest, which triggers a background function that first sleeps 8 seconds (a stand-in slow step) and then calls a real LLM (via OpenRouter) to write a short paragraph about the topic. `GET /reports/:id` lets the client poll for the result: `pending` first, `done` with the generated text once it finishes. A separate `heartbeat` function runs every minute on a cron schedule with no request or event involved at all, logging a summary of how many reports are pending/done/failed.
 
 ## How to run it
 
@@ -40,7 +40,7 @@ Open `http://localhost:8288` for the dashboard.
 | Endpoint | `POST /reports` | HTTP request | Validates input, sends `report/requested` event, returns `202` instantly |
 | Endpoint | `GET /reports/:id` | HTTP request | Returns the report's current status/result, `404` if unknown |
 | Endpoint | `GET /reports` | HTTP request | Lists all reports |
-| Function | `make-report` | Event: `report/requested` | Calls a real LLM to write about the topic; retries twice on failure |
+| Function | `make-report` | Event: `report/requested` | Two steps: sleeps 8s, then calls a real LLM to write about the topic; retries twice on failure |
 | Function | `heartbeat` | Cron: `* * * * *` | Logs a pending/done/failed summary every minute, no request involved |
 
 ## The 202 → poll proof
